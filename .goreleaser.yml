@@ -18,7 +18,8 @@ builds:
     binary: tdu
 
 archives:
-  - format: tar.gz
+  - formats:
+      - tar.gz
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
 
 checksum:
@@ -33,16 +34,19 @@ changelog:
       - "^ci:"
       - "^chore:"
 
-brews:
-  - repository:
+homebrew_casks:
+  - name: tdu
+    binaries:
+      - tdu
+    homepage: "https://github.com/TD-Yofun/tdu-cli"
+    description: "talkdesk utils - a collection of daily work utilities"
+    hooks:
+      post:
+        install: |
+          if OS.mac?
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/tdu"]
+          end
+    repository:
       owner: TD-Yofun
       name: homebrew-tap
       token: "{{ .Env.TAP_GITHUB_TOKEN }}"
-    directory: Formula
-    homepage: "https://github.com/TD-Yofun/tdu-cli"
-    description: "talkdesk utils - a collection of daily work utilities"
-    license: "MIT"
-    install: |
-      bin.install "tdu"
-    test: |
-      system "#{bin}/tdu", "--version"
