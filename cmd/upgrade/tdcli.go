@@ -165,7 +165,7 @@ func upgradeTdCli() error {
 
 	if !cached {
 		printDetail(fmt.Sprintf("Downloading to: %s", downloadPath))
-		if err := downloadReleaseAsset(token, targetAsset.ID, targetAsset.Size, downloadPath); err != nil {
+		if err := downloadReleaseAsset(token, tdCliRepo, targetAsset.ID, targetAsset.Size, downloadPath); err != nil {
 			return fmt.Errorf("download failed: %w", err)
 		}
 		fi, _ := os.Stat(downloadPath)
@@ -348,8 +348,8 @@ func getTdCliAssetName() (string, error) {
 	}
 }
 
-func downloadReleaseAsset(token string, assetID int, expectedSize int64, destPath string) error {
-	url := fmt.Sprintf("https://api.github.com/repos/%s/releases/assets/%d", tdCliRepo, assetID)
+func downloadReleaseAsset(token string, repo string, assetID int, expectedSize int64, destPath string) error {
+	url := fmt.Sprintf("https://api.github.com/repos/%s/releases/assets/%d", repo, assetID)
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return err

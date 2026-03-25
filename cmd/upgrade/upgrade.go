@@ -15,6 +15,7 @@ type upgradeItem struct {
 var upgradeItems = []upgradeItem{
 	{Name: "tdu", Description: "Upgrade tdu CLI itself to the latest version"},
 	{Name: "td-cli", Description: "Upgrade/install td-cli from Talkdesk/td-cli"},
+	{Name: "forticlient-vpn", Description: "Upgrade/install FortiClient VPN"},
 }
 
 var Cmd = &cobra.Command{
@@ -56,6 +57,8 @@ func runUpgrade(cmd *cobra.Command, args []string) error {
 		return upgradeTdu()
 	case "td-cli":
 		return upgradeTdCli()
+	case "forticlient-vpn":
+		return upgradeFortiClientVPN()
 	default:
 		fmt.Println("No upgrade handler for", selected.Name)
 	}
