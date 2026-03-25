@@ -6,6 +6,14 @@ import (
 )
 
 func upgradeTdu() error {
+	fmt.Println("Updating Homebrew tap...")
+	updateCmd := newCommand("brew", "update")
+	updateCmd.Stdout = os.Stdout
+	updateCmd.Stderr = os.Stderr
+	if err := updateCmd.Run(); err != nil {
+		fmt.Println("Warning: brew update failed, continuing with upgrade...")
+	}
+
 	fmt.Println("Upgrading tdu via Homebrew...")
 	cmd := newCommand("brew", "upgrade", "TD-Yofun/tap/tdu")
 	cmd.Stdout = os.Stdout

@@ -59,13 +59,17 @@ homebrew_casks:
           require "uri"
 
           uri = URI.parse("https://api.github.com/repos/TD-Yofun/tdu-cli/releases/tags/#{tag}")
-          resp = Net::HTTP.get(uri, {
-            "Accept" => "application/vnd.github+json",
-            "Authorization" => "Bearer #{token}",
-            "X-GitHub-Api-Version" => "2022-11-28"
-          })
-          release = JSON.parse(resp)
-          asset = release["assets"].find { |a| a["name"] == name }
+          http = Net::HTTP.new(uri.host, uri.port)
+          http.use_ssl = true
+          request = Net::HTTP::Get.new(uri)
+          request["Accept"] = "application/vnd.github+json"
+          request["Authorization"] = "Bearer #{token}"
+          request["X-GitHub-Api-Version"] = "2022-11-28"
+          response = http.request(request)
+          release = JSON.parse(response.body)
+          assets = release["assets"]
+          raise "No assets found in release #{tag}. Check your HOMEBREW_GITHUB_API_TOKEN has access to TD-Yofun/tdu-cli." if assets.nil?
+          asset = assets.find { |a| a["name"] == name }
           raise "Asset #{name} not found in release #{tag}" if asset.nil?
           asset["url"]
         end
