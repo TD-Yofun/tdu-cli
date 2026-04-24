@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/TD-Yofun/tdu-cli/cmd/fix"
 	"github.com/TD-Yofun/tdu-cli/cmd/upgrade"
 	"github.com/spf13/cobra"
 )
@@ -27,4 +28,5 @@ func Execute() {
 func init() {
 	rootCmd.Version = version
 	rootCmd.AddCommand(upgrade.Cmd)
+	rootCmd.AddCommand(fix.Cmd)
 }

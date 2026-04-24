@@ -3,24 +3,28 @@ package upgrade
 import (
 	"fmt"
 	"os"
+
+	"github.com/TD-Yofun/tdu-cli/cmd/utils"
 )
 
 func upgradeTdu() error {
-	fmt.Println("Updating Homebrew tap...")
+	printSection("🔧", "tdu Self-Upgrade")
+
+	utils.PrintStep(1, 2, "📦", "Updating Homebrew tap...")
 	updateCmd := newCommand("brew", "update")
 	updateCmd.Stdout = os.Stdout
 	updateCmd.Stderr = os.Stderr
 	if err := updateCmd.Run(); err != nil {
-		fmt.Println("Warning: brew update failed, continuing with upgrade...")
+		printDetail("Warning: brew update failed, continuing with upgrade...")
 	}
 
-	fmt.Println("Upgrading tdu via Homebrew...")
+	utils.PrintStep(2, 2, "⬆️", "Upgrading tdu via Homebrew...")
 	cmd := newCommand("brew", "upgrade", "TD-Yofun/tap/tdu")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("brew upgrade failed: %w", err)
 	}
-	fmt.Println("tdu upgraded successfully!")
+	printDetail("tdu upgraded successfully!")
 	return nil
 }

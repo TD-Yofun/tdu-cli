@@ -1,10 +1,7 @@
 package upgrade
 
 import (
-	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -22,19 +19,9 @@ const (
 )
 
 func upgradeFortiClientVPN() error {
-	token := os.Getenv("HOMEBREW_GITHUB_API_TOKEN")
-	if token == "" {
-		fmt.Println()
-		fmt.Println("  ❌ ═══════════════════════════════════════════")
-		fmt.Println("  ❌  HOMEBREW_GITHUB_API_TOKEN is not set")
-		fmt.Println("  ❌ ═══════════════════════════════════════════")
-		fmt.Println()
-		fmt.Println("  Please add the following to your shell profile (~/.zshrc or ~/.bashrc):")
-		fmt.Println()
-		fmt.Println("    export HOMEBREW_GITHUB_API_TOKEN=your_github_personal_access_token")
-		fmt.Println()
-		fmt.Println("  Then restart your terminal or run: source ~/.zshrc")
-		return fmt.Errorf("HOMEBREW_GITHUB_API_TOKEN is not set")
+	token, err := requireGitHubToken()
+	if err != nil {
+		return err
 	}
 
 	printSection("🛡️", "FortiClient VPN Upgrade")
@@ -53,7 +40,7 @@ func upgradeFortiClientVPN() error {
 	// ═══════════════ Step 2: Fetch release info ═══════════════
 	printStep(2, "🌐", "Fetching release info from GitHub...")
 	printDetail(fmt.Sprintf("API: https://api.github.com/repos/%s/releases/tags/%s", fortiClientRepo, fortiClientReleaseTag))
-	release, err := fetchFortiClientRelease(token)
+	release, err := fetchGitHubRelease(token, fmt.Sprintf("https://api.github.com/repos/%s/releases/tags/%s", fortiClientRepo, fortiClientReleaseTag))
 	if err != nil {
 		return fmt.Errorf("failed to fetch release: %w", err)
 	}
@@ -171,35 +158,6 @@ func getLocalFortiClientVersion() (string, bool) {
 		return "", false
 	}
 	return version, true
-}
-
-func fetchFortiClientRelease(token string) (*ghRelease, error) {
-	url := fmt.Sprintf("https://api.github.com/repos/%s/releases/tags/%s",
-		fortiClientRepo, fortiClientReleaseTag)
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("Accept", "application/vnd.github+json")
-	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("GitHub API returned %d: %s", resp.StatusCode, string(body))
-	}
-
-	var release ghRelease
-	if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
-		return nil, fmt.Errorf("failed to parse release JSON: %w", err)
-	}
-	return &release, nil
 }
 
 func findLatestMpkgAsset(assets []ghAsset) (*ghAsset, string, error) {
