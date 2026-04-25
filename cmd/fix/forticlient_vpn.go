@@ -48,14 +48,14 @@ func fixFortiClientVPN() error {
 	printStep(1, totalSteps, "🔍", "Diagnosing FortiClient VPN status...")
 
 	servctl2Running := isProcessRunning("fctservctl2")
-	privilegedHelperRunning := isProcessRunning("PrivilegedHelper")
+	privilegedHelperLoaded := isDaemonLoaded("com.fortinet.forticlient.macos.PrivilegedHelper")
 	fortiTrayRunning := isProcessRunning("FortiTray")
 
 	printDetail(fmt.Sprintf("fctservctl2 (core daemon):  %s", statusEmoji(servctl2Running)))
-	printDetail(fmt.Sprintf("PrivilegedHelper:           %s", statusEmoji(privilegedHelperRunning)))
+	printDetail(fmt.Sprintf("PrivilegedHelper (on-demand):%s", daemonStatusEmoji(privilegedHelperLoaded)))
 	printDetail(fmt.Sprintf("FortiTray (SAML handler):   %s", statusEmoji(fortiTrayRunning)))
 
-	if servctl2Running && privilegedHelperRunning && fortiTrayRunning {
+	if servctl2Running && privilegedHelperLoaded && fortiTrayRunning {
 		fmt.Println()
 		fmt.Println("  ✅ All FortiClient VPN services are running normally!")
 		fmt.Println()
@@ -68,8 +68,8 @@ func fixFortiClientVPN() error {
 	if !servctl2Running {
 		printDetail("  • fctservctl2 daemon is not running (causes blank screen)")
 	}
-	if !privilegedHelperRunning {
-		printDetail("  • PrivilegedHelper is not running (causes blank screen)")
+	if !privilegedHelperLoaded {
+		printDetail("  • PrivilegedHelper daemon is not loaded (causes blank screen)")
 	}
 	if !fortiTrayRunning {
 		printDetail("  • FortiTray is not running (causes SAML login failure)")
@@ -83,7 +83,7 @@ func fixFortiClientVPN() error {
 	if !servctl2Running {
 		printDetail("  • Load and start fctservctl2 daemon")
 	}
-	if !privilegedHelperRunning {
+	if !privilegedHelperLoaded {
 		printDetail("  • Load PrivilegedHelper daemon")
 	}
 	printDetail("  • Restart FortiClient processes")
@@ -127,7 +127,7 @@ func fixFortiClientVPN() error {
 		printDetail("✓ servctl2 is already running, skipping")
 	}
 
-	if !privilegedHelperRunning {
+	if !privilegedHelperLoaded {
 		printDetail(fmt.Sprintf("Loading PrivilegedHelper plist: %s", privilegedHelperPlist))
 		if _, err := os.Stat(privilegedHelperPlist); os.IsNotExist(err) {
 			printDetail("⚠️  PrivilegedHelper plist not found, skipping (FortiClient may need reinstall)")
@@ -135,11 +135,11 @@ func fixFortiClientVPN() error {
 			if err := runSudoCommand("Loading PrivilegedHelper daemon", "launchctl", "load", privilegedHelperPlist); err != nil {
 				printDetail("⚠️  Failed to load PrivilegedHelper (may already be loaded): " + err.Error())
 			} else {
-				printDetail("✓ PrivilegedHelper plist loaded")
+				printDetail("✓ PrivilegedHelper daemon loaded")
 			}
 		}
 	} else {
-		printDetail("✓ PrivilegedHelper is already running, skipping")
+		printDetail("✓ PrivilegedHelper daemon is already loaded, skipping")
 	}
 
 	// ═══════════════ Step 4: Restart FortiClient ═══════════════
@@ -199,13 +199,13 @@ func fixFortiClientVPN() error {
 	waitCmd.Run()
 
 	servctl2OK := isProcessRunning("fctservctl2")
-	privilegedHelperOK := isProcessRunning("PrivilegedHelper")
+	privilegedHelperOK := isDaemonLoaded("com.fortinet.forticlient.macos.PrivilegedHelper")
 	fortiTrayOK := isProcessRunning("FortiTray")
 	fortiClientOK := isProcessRunning("FortiClient")
 
 	printDetail(fmt.Sprintf("FortiClient (GUI):          %s", statusEmoji(fortiClientOK)))
 	printDetail(fmt.Sprintf("fctservctl2 (core daemon):  %s", statusEmoji(servctl2OK)))
-	printDetail(fmt.Sprintf("PrivilegedHelper:           %s", statusEmoji(privilegedHelperOK)))
+	printDetail(fmt.Sprintf("PrivilegedHelper (on-demand):%s", daemonStatusEmoji(privilegedHelperOK)))
 	printDetail(fmt.Sprintf("FortiTray (SAML handler):   %s", statusEmoji(fortiTrayOK)))
 
 	allOK := servctl2OK && privilegedHelperOK && fortiTrayOK && fortiClientOK
@@ -238,11 +238,26 @@ func isProcessRunning(name string) bool {
 	return strings.TrimSpace(string(out)) != ""
 }
 
+// isDaemonLoaded checks if a launchd daemon is loaded via "sudo launchctl list <label>".
+// This is needed for on-demand MachServices like PrivilegedHelper that don't run as persistent processes.
+func isDaemonLoaded(label string) bool {
+	cmd := newCommand("sudo", "launchctl", "list", label)
+	err := cmd.Run()
+	return err == nil
+}
+
 func statusEmoji(running bool) string {
 	if running {
 		return "✅ Running"
 	}
 	return "❌ Not running"
+}
+
+func daemonStatusEmoji(loaded bool) string {
+	if loaded {
+		return "✅ Loaded"
+	}
+	return "❌ Not loaded"
 }
 
 func getFortiClientVersion() string {
