@@ -29,6 +29,11 @@ cmd/
   fix/
     fix.go               # fix subcommand entry, promptui interactive selection of fix targets
     forticlient_vpn.go   # FortiClient VPN fix logic (daemon loading, process restart, FortiTray)
+  report/
+    report.go            # report subcommand entry, promptui interactive selection of report targets
+    forticlient_vpn.go   # FortiClient VPN report logic (collect logs, system info, create GitHub issue)
+  utils/
+    utils.go             # Shared utilities (NewCommand, PrintSection, PrintStep, PrintDetail, RunSudoCommand, etc.)
 .goreleaser.yml          # GoReleaser v2 config (builds, archives, homebrew cask, changelog)
 ```
 
@@ -43,6 +48,8 @@ tdu
 │   └── forticlient-vpn  # Download and install FortiClient VPN .mpkg from GitHub Release
 └── fix                  # Interactively select and fix known issues
     └── forticlient-vpn  # Fix blank screen and SAML login issues
+└── report               # Collect diagnostics and report issues to GitHub
+    └── forticlient-vpn  # Collect logs/info and create a GitHub issue
 ```
 
 ## Key Modules
@@ -50,7 +57,7 @@ tdu
 ### cmd/root.go
 - Defines the root Cobra command `tdu`
 - `version` variable is set at build time via `-ldflags "-X github.com/TD-Yofun/tdu-cli/cmd.version=..."`
-- Registers `upgrade.Cmd` and `fix.Cmd` as subcommands in `init()`
+- Registers `upgrade.Cmd`, `fix.Cmd`, and `report.Cmd` as subcommands in `init()`
 
 ### cmd/upgrade/upgrade.go
 - Defines the `upgrade` subcommand
@@ -93,6 +100,30 @@ tdu
 - Uses `launchctl load` / `launchctl start` to restore system daemons
 - Has its own `newCommand()`, `printSection()`, `printStep()`, `printDetail()`, `runSudoCommand()` helpers (scoped to the `fix` package)
 
+### cmd/report/report.go
+- Defines the `report` subcommand
+- Uses promptui for interactive selection (with emoji template, same pattern as upgrade/fix)
+- Maintains `reportItems` slice — the list of all selectable report targets
+- Routes user selection to `reportFortiClientVPN()`
+
+### cmd/report/forticlient_vpn.go
+- 5-step process: collect app info → check service status → collect logs (with optional sudo) → compose & preview issue → submit to GitHub
+- Collects: FortiClient version, macOS version, architecture, hostname, service status (processes + launchd daemons)
+- Log sources: user-level (`~/Library/Logs/FortiClient/`) and system-level (`/Library/Application Support/Fortinet/FortiClient/Logs/`)
+- System logs may require sudo — prompts user for authorization before reading
+- Composes a GitHub issue with environment info, service status, and logs in collapsible `<details>` blocks
+- Creates issue via GitHub API POST to `TD-Yofun/tdu-cli/issues` using `HOMEBREW_GITHUB_API_TOKEN`
+- Shows issue preview and asks for confirmation before submitting
+- Labels created issues with `bug` and `forticlient-vpn`
+
+### cmd/utils/utils.go
+- Shared utility functions used by `upgrade`, `fix`, and `report` packages
+- `NewCommand()`: wraps `exec.Command` for testability
+- `PrintSection()`, `PrintStep()`, `PrintDetail()`: emoji-style formatted output
+- `RunSudoCommand()`: runs commands with sudo, with prominent permission denied error
+- `FormatBytes()`: human-readable byte size formatting
+- `RequireGitHubToken()`: checks `HOMEBREW_GITHUB_API_TOKEN` env var with prominent error box
+
 ## Build & Release
 
 ```bash
@@ -131,10 +162,12 @@ When the user says "release a version" (or similar), execute the following steps
 
 - When adding a new upgradeable tool, create a dedicated file under `cmd/upgrade/` and register it in the `upgradeItems` slice and `switch` statement in `upgrade.go`.
 - When adding a new fixable tool, create a dedicated file under `cmd/fix/` and register it in the `fixItems` slice and `switch` statement in `fix.go`.
+- When adding a new reportable tool, create a dedicated file under `cmd/report/` and register it in the `reportItems` slice and `switch` statement in `report.go`.
 - Wrap external command calls with `newCommand()` to keep them testable.
 - Use emoji-style output for user interaction (`printSection`, `printStep`, `printDetail`).
 - Follow the 6-step upgrade pattern: check local version → fetch remote version → compare → download (with cache) → install → verify.
 - Follow the fix pattern: diagnose → confirm with user → apply fix (with sudo prompt) → restart → verify.
+- Follow the report pattern: collect info → check services → collect logs (with optional sudo) → compose & preview → submit to GitHub.
 - When sudo is required, clearly list the actions that need elevated privileges and ask the user for confirmation before proceeding.
 - Error handling should be detailed, including debug info (missing token, insufficient permissions, missing resources, etc.).
 - Provide progress bars and caching for large file downloads.

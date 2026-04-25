@@ -27,6 +27,9 @@ tdu upgrade
 
 # Interactive fix — select a known issue to fix
 tdu fix
+
+# Report an issue to GitHub with diagnostics
+tdu report
 ```
 
 ### Upgrade Targets
@@ -43,6 +46,12 @@ tdu fix
 |---|---|
 | `forticlient-vpn` | Fix blank screen and SAML login issues |
 
+### Report Targets
+
+| Target | Description |
+|---|---|
+| `forticlient-vpn` | Collect logs and system info, create a GitHub issue |
+
 ## Development
 
 ```bash
@@ -53,6 +62,7 @@ go build -o tdu .
 ./tdu --version
 ./tdu upgrade
 ./tdu fix
+./tdu report
 ```
 
 ## Release

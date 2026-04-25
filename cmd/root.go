@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/TD-Yofun/tdu-cli/cmd/fix"
+	"github.com/TD-Yofun/tdu-cli/cmd/report"
 	"github.com/TD-Yofun/tdu-cli/cmd/upgrade"
 	"github.com/spf13/cobra"
 )
@@ -29,4 +30,5 @@ func init() {
 	rootCmd.Version = version
 	rootCmd.AddCommand(upgrade.Cmd)
 	rootCmd.AddCommand(fix.Cmd)
+	rootCmd.AddCommand(report.Cmd)
 }
