@@ -46,33 +46,68 @@ func upgradeFortiClientVPN() error {
 	}
 	printDetail(fmt.Sprintf("Release contains %d asset(s)", len(release.Assets)))
 
-	latestAsset, latestVersion, err := findLatestMpkgAsset(release.Assets)
+	candidates, err := listSortedMpkgAssets(release.Assets)
 	if err != nil {
 		return err
 	}
-	printDetail(fmt.Sprintf("Latest FortiClient VPN version: %s", latestVersion))
-	printDetail(fmt.Sprintf("Asset: %s (%s)", latestAsset.Name, formatBytes(latestAsset.Size)))
+	printDetail(fmt.Sprintf("Found %d installable version(s)", len(candidates)))
 
-	// ═══════════════ Step 3: Compare versions ═══════════════
-	printStep(3, "🔄", "Comparing versions...")
-	if installed && compareVersions(localVersion, latestVersion) >= 0 {
+	// ═══════════════ Step 3: Select version ═══════════════
+	printStep(3, "🎯", "Select version to install...")
+	items := make([]string, len(candidates))
+	for i, c := range candidates {
+		label := c.version
+		if i == 0 {
+			label += "  (latest)"
+		}
+		if installed && c.version == localVersion {
+			label += "  [installed]"
+		}
+		items[i] = label
+	}
+	selectPrompt := promptui.Select{
+		Label: "  Select FortiClient VPN version",
+		Items: items,
+		Size:  8,
+		Templates: &promptui.SelectTemplates{
+			Label:    "  {{ . }}",
+			Active:   "  ➜ {{ . | cyan }}",
+			Inactive: "    {{ . }}",
+			Selected: "  ✅ {{ . | green }}",
+		},
+	}
+	selIdx, _, err := selectPrompt.Run()
+	if err != nil {
 		fmt.Println()
-		fmt.Println("  ✅ FortiClient VPN is already up to date! (version: " + localVersion + ")")
+		fmt.Println("  ❌ Operation cancelled by user.")
 		fmt.Println()
 		return nil
 	}
+	selected := candidates[selIdx]
+	selectedVersion := selected.version
+	selectedAsset := selected.asset
+	printDetail(fmt.Sprintf("Asset: %s (%s)", selectedAsset.Name, formatBytes(selectedAsset.Size)))
 
 	action := "install"
 	if installed {
-		action = "upgrade"
-		printDetail(fmt.Sprintf("Version change: %s → %s", localVersion, latestVersion))
+		switch cmp := compareVersions(localVersion, selectedVersion); {
+		case cmp == 0:
+			action = "reinstall"
+			printDetail(fmt.Sprintf("Selected version (%s) is already installed", selectedVersion))
+		case cmp > 0:
+			action = "downgrade"
+			printDetail(fmt.Sprintf("Downgrade: %s → %s", localVersion, selectedVersion))
+		default:
+			action = "upgrade"
+			printDetail(fmt.Sprintf("Upgrade: %s → %s", localVersion, selectedVersion))
+		}
 	} else {
-		printDetail(fmt.Sprintf("Will install version: %s", latestVersion))
+		printDetail(fmt.Sprintf("Will install version: %s", selectedVersion))
 	}
 
 	fmt.Println()
 	confirmPrompt := promptui.Prompt{
-		Label:     fmt.Sprintf("  Do you want to %s FortiClient VPN to %s", action, latestVersion),
+		Label:     fmt.Sprintf("  Do you want to %s FortiClient VPN (%s)", action, selectedVersion),
 		IsConfirm: true,
 	}
 	_, err = confirmPrompt.Run()
@@ -86,22 +121,22 @@ func upgradeFortiClientVPN() error {
 
 	// ═══════════════ Step 4: Download ═══════════════
 	printStep(4, "⬇️ ", "Downloading FortiClient VPN installer...")
-	printDetail(fmt.Sprintf("Target asset: %s", latestAsset.Name))
-	printDetail(fmt.Sprintf("Asset ID: %d, Size: %s", latestAsset.ID, formatBytes(latestAsset.Size)))
+	printDetail(fmt.Sprintf("Target asset: %s", selectedAsset.Name))
+	printDetail(fmt.Sprintf("Asset ID: %d, Size: %s", selectedAsset.ID, formatBytes(selectedAsset.Size)))
 
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return fmt.Errorf("failed to get home directory: %w", err)
 	}
-	cacheDir := filepath.Join(homeDir, fortiClientCacheBase, latestVersion)
+	cacheDir := filepath.Join(homeDir, fortiClientCacheBase, selectedVersion)
 	if err := os.MkdirAll(cacheDir, 0755); err != nil {
 		return fmt.Errorf("failed to create cache dir: %w", err)
 	}
 
-	downloadPath := filepath.Join(cacheDir, latestAsset.Name)
+	downloadPath := filepath.Join(cacheDir, selectedAsset.Name)
 
 	cached := false
-	if fi, err := os.Stat(downloadPath); err == nil && fi.Size() == latestAsset.Size {
+	if fi, err := os.Stat(downloadPath); err == nil && fi.Size() == selectedAsset.Size {
 		cached = true
 		printDetail(fmt.Sprintf("Using cached download: %s (%s)", downloadPath, formatBytes(fi.Size())))
 		printDetail("✓ Cached file size matches expected size, skipping download")
@@ -109,7 +144,7 @@ func upgradeFortiClientVPN() error {
 
 	if !cached {
 		printDetail(fmt.Sprintf("Downloading to: %s", downloadPath))
-		if err := downloadReleaseAsset(token, fortiClientRepo, latestAsset.ID, latestAsset.Size, downloadPath); err != nil {
+		if err := downloadReleaseAsset(token, fortiClientRepo, selectedAsset.ID, selectedAsset.Size, downloadPath); err != nil {
 			return fmt.Errorf("download failed: %w", err)
 		}
 		fi, _ := os.Stat(downloadPath)
@@ -119,7 +154,7 @@ func upgradeFortiClientVPN() error {
 
 	// ═══════════════ Step 5: Install ═══════════════
 	printStep(5, "📦", "Installing FortiClient VPN...")
-	printDetail(fmt.Sprintf("Installing %s ...", latestAsset.Name))
+	printDetail(fmt.Sprintf("Installing %s ...", selectedAsset.Name))
 	printDetail("(sudo required — you may be prompted for your password)")
 	fmt.Println()
 
@@ -160,16 +195,18 @@ func getLocalFortiClientVersion() (string, bool) {
 	return version, true
 }
 
-func findLatestMpkgAsset(assets []ghAsset) (*ghAsset, string, error) {
+type mpkgCandidate struct {
+	asset   *ghAsset
+	version string
+	parts   []int
+}
+
+// listSortedMpkgAssets returns all forticlient-vpn-*.mpkg assets from a release
+// sorted in descending version order (latest first).
+func listSortedMpkgAssets(assets []ghAsset) ([]mpkgCandidate, error) {
 	re := regexp.MustCompile(`^forticlient-vpn-([\d]+(?:\.[\d]+)+)\.mpkg$`)
 
-	type versionedAsset struct {
-		asset   *ghAsset
-		version string
-		parts   []int
-	}
-
-	var candidates []versionedAsset
+	var candidates []mpkgCandidate
 	for i := range assets {
 		matches := re.FindStringSubmatch(assets[i].Name)
 		if len(matches) >= 2 {
@@ -177,7 +214,7 @@ func findLatestMpkgAsset(assets []ghAsset) (*ghAsset, string, error) {
 			if err != nil {
 				continue
 			}
-			candidates = append(candidates, versionedAsset{
+			candidates = append(candidates, mpkgCandidate{
 				asset:   &assets[i],
 				version: matches[1],
 				parts:   parts,
@@ -186,15 +223,14 @@ func findLatestMpkgAsset(assets []ghAsset) (*ghAsset, string, error) {
 	}
 
 	if len(candidates) == 0 {
-		return nil, "", fmt.Errorf("no forticlient-vpn-*.mpkg asset found in release")
+		return nil, fmt.Errorf("no forticlient-vpn-*.mpkg asset found in release")
 	}
 
 	sort.Slice(candidates, func(i, j int) bool {
 		return compareVersionSlices(candidates[i].parts, candidates[j].parts) > 0
 	})
 
-	latest := candidates[0]
-	return latest.asset, latest.version, nil
+	return candidates, nil
 }
 
 func parseVersionParts(v string) ([]int, error) {

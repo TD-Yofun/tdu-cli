@@ -141,22 +141,14 @@ GoReleaser v2 configuration (`.goreleaser.yml`):
 - Custom Ruby module `GitHubPrivateRepo` in cask for private release asset downloads
 - Post-install hook removes macOS quarantine attribute
 
-## Release Workflow
+## Release & Commit Workflows
 
-When the user says "release a version" (or similar), execute the following steps automatically:
+Both workflows live as on-demand skills under `.agents/skills/`:
 
-1. **Check workspace status**: Run `git status` to see if there are uncommitted changes.
-2. **Commit changes** (if any): Run `git add -A && git commit`. Auto-generate the commit message based on the changes, following Conventional Commits format (`feat: xxx` or `fix: xxx`).
-3. **Determine the new version number**:
-   - Run `git tag --sort=-v:refname | head -1` to get the latest tag.
-   - Version format: `vMAJOR.MINOR.PATCH` (e.g. `v0.2.1`).
-   - Default: increment PATCH (e.g. `v0.2.1` → `v0.2.2`).
-   - If the user specifies a version, use that.
-   - If the user says "minor", increment MINOR (e.g. `v0.2.1` → `v0.3.0`).
-   - If the user says "major", increment MAJOR (e.g. `v0.2.1` → `v1.0.0`).
-4. **Create tag**: Run `git tag <new-version>`.
-5. **Push to remote**: Run `git push && git push --tags`.
-6. **Confirm completion**: Display the final version number and push result.
+- `commit` — [.agents/skills/commit/SKILL.md](.agents/skills/commit/SKILL.md): stage and commit with a Conventional Commits message generated from the diff.
+- `release` — [.agents/skills/release/SKILL.md](.agents/skills/release/SKILL.md): commit pending changes, bump semver tag, build-check, tag, and push to trigger GoReleaser CI.
+
+Invoke them via `/commit` or `/release` in chat, or they will load automatically when the user asks to commit or release.
 
 ## Coding Conventions
 
